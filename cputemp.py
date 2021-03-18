@@ -10,6 +10,9 @@ if os == 'Linux':
     from commands.linux import parseOutput, command
 elif os == 'Darwin':
     from commands.darwin import parseOutput, command
+else:
+    print('Operating system not supported (yet)')
+    exit(-1)
 
 printValue = False
 
