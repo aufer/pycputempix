@@ -1,29 +1,24 @@
 import time
 import subprocess
 import threading
+import platform
 from statistics import mean
 from bcolors import bcolors as c
 
-bashCommand = "cat /sys/class/thermal/thermal_zone0/temp"
+os = platform.system()
+if os == 'Linux':
+    from commands.linux import parseOutput, command
+elif os == 'Darwin':
+    from commands.darwin import parseOutput, command
+
 printValue = False
 
-def parseOutput(output):
-    return float(output.decode('utf-8')) / 1000
-
-def runner(listeners):
+def runner(listeners, event = None):
     histSize = 2 * 60 # 120 times 0.5s
     history = [None] * histSize
     rundicator = '|'
 
-    def getRundicator():
-        if rundicator == "\u2013":
-            return "\\"
-        elif rundicator == "\\":
-            return "|"
-        elif rundicator == "|":
-            return "/"
-        else:
-            return "\u2013"
+    rundicatorSymbols = ['|', '/', '\u2013', '\\']
 
     def getCCode(val):
         return c.WARNING if val > 55 and val <= 69 else c.FAIL if val > 69 else c.OKGREEN
@@ -32,7 +27,7 @@ def runner(listeners):
 
     idx = 0
     while True:
-        process = subprocess.Popen(bashCommand.split(), stdout=subprocess.PIPE)
+        process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
         output, error = process.communicate()
 
         if error:
@@ -49,7 +44,7 @@ def runner(listeners):
         [listener.notify(*[output, avg]) for listener in listeners]
         if len(listeners) == 0 or printValue:
             print(oStr.format(rundicator, getCCode(output), output, c.ENDC, getCCode(avg), round(avg, 2), c.ENDC), end="\r", flush=True)
-            rundicator = getRundicator()
+            rundicator = rundicatorSymbols[idx % 4]
         time.sleep(0.5)
 
 class CpuTemper:
@@ -57,6 +52,17 @@ class CpuTemper:
 
     def addListener(self, listener):
         self.listeners.append(listener)
+        return self
 
     def run(self):
         threading.Thread(target=runner, args=[self.listeners], daemon=True).start()
+
+    def runStandalone(self):
+        printValue = True
+        event = threading.Event()
+        threading.Thread(target=runner, args=[self.listeners, event], daemon=True).start()
+
+        event.wait()
+
+if __name__ == '__main__':
+    CpuTemper().runStandalone()
